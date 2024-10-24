@@ -8,8 +8,40 @@ import time
 
 chrome_options = Options()
 chrome_options.add_experimental_option("detach", True)
+
+def divide_address(address):
+    # 都道府県 + 市区町村 + 番地
+    matches = re.match(r'(...??[都道府県])(.+?[市区町村])(.+)', address)
+    
+    if matches:
+        # 市区町村の後ろに数字で始まる番地を切り出すために再度分割
+        city_town_village = matches[2]
+        address_tail = matches[3].strip()
+
+        # 数字で始まる部分を番地として切り出し
+        detailed_address = re.match(r'([^\d]+)(\d.+)', address_tail)
+
+        if detailed_address:
+            return {
+                "都道府県": matches[1],
+                "市区町村": city_town_village + detailed_address[1].strip(),
+                "番地": detailed_address[2].strip()
+            }
+        else:
+            return {
+                "都道府県": matches[1],
+                "市区町村": city_town_village.strip(),
+                "番地": address_tail.strip()
+            }
+    else:
+        return {
+            "都道府県": "",
+            "市区町村": "",
+            "番地": ""
+        }
+
 try:
-    cService = ChromeService(executable_path=R"C:\Users\akiyoshi\OneDrive\デスクトップ\インターン\chromedriver.exe")
+    cService = ChromeService(executable_path=R"C:\Users\akiyoshi\OneDrive\デスクトップ\Exercise_for_Pool\Python\ex1_web-scraping\chromedriver.exe")
     driver = webdriver.Chrome(service=cService, options=chrome_options)
     driver.get('https://www.gnavi.co.jp/')
     search_area = driver.find_element(By.NAME, "suggest-area")
@@ -73,22 +105,8 @@ try:
     # データの整形
     data_list = []
     for i in range(len(shop_list)):
-        address_pattern = re.compile(
-            r'(?P<都道府県>[^\s]+?[都道府県])\s*'  # 「都」「道」「府」「県」で終わるパターン
-            r'(?P<市区町村>[^\s]+?[市区町村]?[区町村])\s*'  # 「市」「区」「町」「村」で終わるパターン
-            r'(?P<番地>[^\s]+(?:\d+[-\d]*)?)\s*'  # 番地（数字とハイフンを含む可能性がある）
-            r'(?P<建物名>.*)'
-        )
-        match = address_pattern.match(addres_list[i])
-        if match:
-            address_components = match.groupdict()
-        else:
-            address_components = {
-                "都道府県": addres_list[i].split()[0] if addres_list[i] != "N/A" else "不明",
-                "市区町村": "不明",
-                "番地": "不明",
-                "建物名": "不明"
-            }
+        # divide_address関数を使って住所を分割
+        address_components = divide_address(addres_list[i])
 
         data_dict = {
             "店舗名": shop_list[i],
@@ -97,7 +115,7 @@ try:
             "都道府県": address_components["都道府県"],
             "市区町村": address_components["市区町村"],
             "番地": address_components["番地"],
-            "建物名": address_components["建物名"],
+            "建物名": "",  # divide_addressでは建物名は取得しないため空にする
             "URL": url_list[i],
             "SSL": ssl_list[i]
         }
