@@ -9,16 +9,17 @@ import time
 chrome_options = Options()
 chrome_options.add_experimental_option("detach", True)
 
+# ユーザーエージェントを追加
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36"
+chrome_options.add_argument(f"user-agent={user_agent}")
+
 def divide_address(address):
-    # 都道府県 + 市区町村 + 番地
     matches = re.match(r'(...??[都道府県])(.+?[市区町村])(.+)', address)
     
     if matches:
-        # 市区町村の後ろに数字で始まる番地を切り出すために再度分割
         city_town_village = matches[2]
         address_tail = matches[3].strip()
 
-        # 数字で始まる部分を番地として切り出し
         detailed_address = re.match(r'([^\d]+)(\d.+)', address_tail)
 
         if detailed_address:
@@ -52,6 +53,7 @@ try:
     phone_number_list = []
     addres_list = []
     ssl_list = []
+    official_page_urls = []  # 追加: オフィシャルページURLのリスト
 
     # 検索条件
     search_area.send_keys("京都府")
@@ -78,16 +80,18 @@ try:
             url_list.append(url)
         if len(shop_list) == 50:
             break
+    
     for link in url_list:
         driver.get(link)
+        #電話番号取得
         try:
             phone_number = driver.find_element(By.XPATH, '//*[@id="header-wrapper"]/div/div[2]/div[2]/div').text
         except:
             phone_number = "N/A"
         phone_number_list.append(phone_number)
-
+        
+        #住所取得
         try:
-            # 住所を取得するための複数のXPathを試みる
             try:
                 addres = driver.find_element(By.XPATH, '//*[@id="info-table"]/table/tbody/tr[3]/td/p/span').text
             except:
@@ -101,6 +105,14 @@ try:
             ssl_list.append(True)
         else:
             ssl_list.append(False)
+
+        # 店舗オフィシャルページURLの取得（オフィシャルページリンクがあれば）
+        try:
+            official_page_link = driver.find_element(By.XPATH, '//*[@id="sv-site"]/li/a')
+            official_page_url = official_page_link.get_attribute('href')
+        except:
+            official_page_url = "N/A"
+        official_page_urls.append(official_page_url)  # 追加: オフィシャルページURLリストに追加
 
     # データの整形
     data_list = []
@@ -116,7 +128,8 @@ try:
             "市区町村": address_components["市区町村"],
             "番地": address_components["番地"],
             "建物名": "",  # divide_addressでは建物名は取得しないため空にする
-            "URL": url_list[i],
+            "URL": official_page_urls[i],  # 店舗のURL
+            # "オフィシャルページ": official_page_urls[i],  # 追加: オフィシャルページURL
             "SSL": ssl_list[i]
         }
         data_list.append(data_dict)

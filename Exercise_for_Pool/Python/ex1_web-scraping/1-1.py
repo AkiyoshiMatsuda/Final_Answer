@@ -5,17 +5,11 @@ from bs4 import BeautifulSoup
 import time
 
 def divide_address(address):
-    # 都道府県 + 市区町村 + 番地
     matches = re.match(r'(...??[都道府県])(.+?[市区町村])(.+)', address)
-    
     if matches:
-        # 市区町村の後ろに数字で始まる番地を切り出すために再度分割
         city_town_village = matches[2]
         address_tail = matches[3].strip()
-
-        # 数字で始まる部分を番地として切り出し
         detailed_address = re.match(r'([^\d]+)(\d.+)', address_tail)
-
         if detailed_address:
             return {
                 "都道府県": matches[1],
@@ -35,83 +29,91 @@ def divide_address(address):
             "番地": ""
         }
 
-url_list = ['https://r.gnavi.co.jp/area/kyoto/rs/?cuisine=CHINESE%2CNOODLE%2CROASTMEAT',
-            'https://r.gnavi.co.jp/area/kyoto/rs/?cuisine=CHINESE%2CNOODLE%2CROASTMEAT&p=2',
-            'https://r.gnavi.co.jp/area/kyoto/rs/?cuisine=CHINESE%2CNOODLE%2CROASTMEAT&p=3'
-            ]
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36'
+}
+
+base_url = 'https://r.gnavi.co.jp/area/kyoto/rs/?cuisine=CHINESE%2CNOODLE%2CROASTMEAT'
+next_page = base_url
 shop_list = []
-shop_url_list =[]
+shop_url_list = []
 tel_list = []
 addres_list = []
-ssl_list=[]
+ssl_list = []
 data_list = []
-#店舗名の取得
-for url in url_list[:50]:
-    res = requests.get(url)
-    soup = BeautifulSoup(res.text,"html.parser")
+
+while next_page:
+    res = requests.get(next_page)
+    soup = BeautifulSoup(res.text, "html.parser")
+    
+    # 店舗名を取得
     elems = soup.find_all("h2")
     for elem in elems:
         if "PR" in elem.contents[0]:
-                continue
-        else :
+            continue
+        else:
             shop_list.append(elem.contents[0])
-    time.sleep(3)
-
-#クローリングのための店舗ごとのurl取得
-for url in url_list:
-    res = requests.get(url)
-    soup = BeautifulSoup(res.text,"html.parser")
-    Elems = soup.find_all("a",href = True)
+    
+    # クローリングのための店舗ごとのurl取得
+    Elems = soup.find_all("a", href=True)
     for Elem in Elems:
         shop_url = Elem['href']
-        #フィルタリング
         if "PR" in Elem.text:
             continue
-        #絶対パスに変換
         if not shop_url.startswith("http"):
             shop_url = f'https://r.gnavi.co.jp{shop_url}'
-        
-        if re.match(r'^https://r.gnavi.co.jp/[\w-]+/$', shop_url):   
+        if re.match(r'^https://r.gnavi.co.jp/[\w-]+/$', shop_url):
             shop_url_list.append(shop_url)
-    time.sleep(3)
-
-#店舗ごとの電話番号取得
-for shop_link in shop_url_list:
-    shop_res = requests.get(shop_link)
-    shop_soup = BeautifulSoup(shop_res.text,"html.parser")
-    shop_elem = shop_soup.find("span",class_="number")
-    tel_list.append(shop_elem.contents[0])
-    time.sleep(3)
-
-count = 0
-#店舗ごとの住所取得、パース
-for shop_link in shop_url_list:
-    res = requests.get(shop_link)
-    res.encoding = res.apparent_encoding
-    soup = BeautifulSoup(res.text,"html.parser")
-    elem = soup.find("span",class_ = "region")
-    count += 1
-    if count % 2 == 0:
-        continue
+    
+    # 次のページリンクを探す
+    next_elem = soup.find("a", {"class": "next"})  # '次へ'ボタンのリンクを取得
+    if next_elem and "href" in next_elem.attrs:
+        next_page = f'https://r.gnavi.co.jp{next_elem["href"]}'
     else:
-        ssl_list.append(shop_url.startswith('https'))
+        next_page = None
+    
+    time.sleep(3) 
+# 店舗ごとの住所取得とSSL確認
+for shop_link in shop_url_list:
+    res = requests.get(shop_link, headers=headers)
+    res.encoding = res.apparent_encoding
+    soup = BeautifulSoup(res.text, "html.parser")
+    
+    # 電話番号取得
+    shop_elem = soup.find("span", class_="number")
+    if shop_elem:
+        tel_list.append(shop_elem.contents[0])
+    else:
+        tel_list.append("電話番号なし")
+    
+    # 住所取得
+    elem = soup.find("span", class_="region")
+    if elem:
         address = elem.contents[0]
         address_components = divide_address(address)
         addres_list.append(address_components)
+    else:
+        # 住所が取得できなかった場合に空のデータを追加
+        print(f"住所が取得できませんでした: {shop_link}")
+        addres_list.append({"都道府県": "", "市区町村": "", "番地": ""})
+    
+    # SSL確認
+    ssl_list.append(shop_link.startswith('https'))
+    
     time.sleep(3)
 
-
-for i in range(len(shop_list[:50])):
+# データをCSVに書き込む
+for i in range(len(shop_list)):
     data_dict = {
-        "店舗名":shop_list[i],
-        "電話番号":tel_list[i],
-        "メールアドレス":"",
-        "都道府県":addres_list[i]["都道府県"],
-        "市区町村":addres_list[i]["市区町村"],
-        "番地":addres_list[i]["番地"],
-        "建物名":addres_list[i].get("建物名", ""),
-        "URL":"",
-        "SSL":ssl_list[i]
+        "店舗名": shop_list[i],
+        "電話番号": tel_list[i],
+        "メールアドレス": "",
+        "都道府県": addres_list[i]["都道府県"],
+        "市区町村": addres_list[i]["市区町村"],
+        "番地": addres_list[i]["番地"],
+        "建物名": addres_list[i].get("建物名", ""),
+        "URL": "",
+        "SSL": ssl_list[i]
     }
     data_list.append(data_dict)
 
