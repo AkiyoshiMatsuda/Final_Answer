@@ -129,7 +129,6 @@ try:
             "番地": address_components["番地"],
             "建物名": "",  # divide_addressでは建物名は取得しないため空にする
             "URL": official_page_urls[i],  # 店舗のURL
-            # "オフィシャルページ": official_page_urls[i],  # 追加: オフィシャルページURL
             "SSL": ssl_list[i]
         }
         data_list.append(data_dict)
